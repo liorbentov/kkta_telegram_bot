@@ -18,13 +18,35 @@ class PingController extends TelegramBaseController {
 
     buildUser(message) {
         const { firstName, lastName, id } = message.from;
-        const fullName = `${firstName} ${lastName}`;
+        const fullName = `${firstName} ${lastName || ""}`;
 
         return { id, fullName };
     }
 
     buildPracticeReply(user, practiceDetails, status) {
         return `*${practiceDetails}*, _${status}_ - ${user.fullName} `;
+    }
+
+    addToGroup({ practice, user, group, unwantedGroups = [] }) {
+        const isPresentInGroup = practice[group].find(item => item.id === user.id);
+
+        if (isPresentInGroup) {
+            return;
+        }
+
+        // Check if user is in different group
+        unwantedGroups.forEach(unwantedGroup => {
+            const index = practice[unwantedGroup].findIndex(item => item.id === user.id);
+            if (index > -1) {
+                practice[unwantedGroup] = [
+                    ...practice[unwantedGroup].slice(0, index),
+                    ...practice[unwantedGroup].slice(index + 1)
+                ];
+            }
+        });
+
+        // Add the user to the group
+        practice[group].push(user);
     }
 
     /**
@@ -56,7 +78,12 @@ class PingController extends TelegramBaseController {
                     text: 'לא', //text of the button
                     callback: (callbackQuery, message) => { //to your callback will be passed callbackQuery and response from method
                         const user = this.buildUser(callbackQuery);
-                        practicesCollection[practiceId][NOT_COMING].push(user);
+                        this.addToGroup({
+                            practice: practicesCollection[practiceId],
+                            user,
+                            group: NOT_COMING,
+                            unwantedGroups: [COMING, MAYBE_COMING]
+                        });
                         const replyText = this.buildPracticeReply(user, relavantText, 'לא באה');
                         $.sendMessage(replyText, {
                             parse_mode: 'Markdown'
@@ -67,7 +94,12 @@ class PingController extends TelegramBaseController {
                     text: 'אולי',
                     callback: (callbackQuery, message) => {
                         const user = this.buildUser(callbackQuery);
-                        practicesCollection[practiceId][MAYBE_COMING].push(user);
+                        this.addToGroup({
+                            practice: practicesCollection[practiceId],
+                            user,
+                            group: MAYBE_COMING,
+                            unwantedGroups: [COMING, NOT_COMING]
+                        });
                         const replyText = this.buildPracticeReply(user, relavantText, 'אולי');
                         $.sendMessage(replyText, {
                             parse_mode: 'Markdown'
@@ -78,7 +110,12 @@ class PingController extends TelegramBaseController {
                     text: 'כן',
                     callback: (callbackQuery, message) => {
                         const user = this.buildUser(callbackQuery);
-                        practicesCollection[practiceId][COMING].push(user);
+                        this.addToGroup({
+                            practice: practicesCollection[practiceId],
+                            user,
+                            group: COMING,
+                            unwantedGroups: [NOT_COMING, MAYBE_COMING]
+                        });
                         const replyText = this.buildPracticeReply(user, relavantText, 'באה');
                         $.sendMessage(replyText, {
                             parse_mode: 'Markdown'
@@ -129,8 +166,28 @@ class PingController extends TelegramBaseController {
             }
 
             let coming = `The list of girls who are coming to practice \n*${practice.details} (${requestedId})*:\n`;
-            practice[COMING].forEach(user => coming += `\n${user.fullName} (${user.id})`);
-            $.sendMessage(coming, { parse_mode: 'Markdown' })
+            if (practice[COMING].length === 0) {
+                coming += " - \n";
+            } else {
+                practice[COMING].forEach(user => coming += `${user.fullName} (${user.id})\n`);
+            }
+
+            let maybeComing = `Girls who are maybe coming to practice:\n`;
+            if (practice[MAYBE_COMING].length === 0) {
+                maybeComing += " - \n";
+            } else {
+                practice[MAYBE_COMING].forEach(user => maybeComing += `${user.fullName} (${user.id})\n`);
+            }
+
+            let notComing = `Girls who are not coming to practice:\n`;
+            if (practice[NOT_COMING].length === 0) {
+                notComing += " - \n";
+            } else {
+                practice[NOT_COMING].forEach(user => notComing += `${user.fullName} (${user.id})\n`);
+            }
+
+            const fullMessage = `${coming}\n${maybeComing}\n${notComing}`;
+            $.sendMessage(fullMessage, { parse_mode: 'Markdown' })
         })
     }
 
