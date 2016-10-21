@@ -6,52 +6,80 @@ const TelegramBaseController = Telegram.TelegramBaseController
 const TextCommand = Telegram.TextCommand
 const tg = new Telegram.Telegram(TOKEN, { workers: 1 })
 
+const COMING = 'COMING';
+const MAYBE_COMING = 'MAYBE_COMING';
+const NOT_COMING = 'NOT_COMING';
+
+const DELIMITER = ' ';
+
 let practicesCollection = {};
 
 class PingController extends TelegramBaseController {
+
+    buildUser(message) {
+        const { firstName, lastName, id } = message.from;
+        const fullName = `${firstName} ${lastName}`;
+
+        return { id, fullName };
+    }
+
+    buildPracticeReply(user, practiceDetails, status) {
+        return `*${practiceDetails}*, _${status}_ - ${user.fullName} `;
+    }
+
     /**
      * @param {Scope} $
      */
-    pingHandler($) {
+    newPracticeHandler($) {
         // Save to DB the new practice
 
         // Get the practice ID
         const { chat, text, messageId: practiceId } = $.message;
         const chatId = chat.id;
 
-        const words = text.split(' ');
+        const words = text.split(DELIMITER);
         words.shift();
-        const relavantText = words.join(' ');
+        const relavantText = words.join(DELIMITER);
 
         practicesCollection[practiceId] = {};
         practicesCollection[practiceId].details = relavantText;
-        practicesCollection[practiceId].coming = [];
+        practicesCollection[practiceId][COMING] = [];
+        practicesCollection[practiceId][NOT_COMING] = [];
+        practicesCollection[practiceId][MAYBE_COMING] = [];
 
         $.runInlineMenu({
-            layout: 2,
+            layout: 3,
             method: 'sendMessage',
             params: [relavantText, { chat_id: CHAT_ID }], //here you must pass the parameters for that method
             menu: [
                 {
-                    text: 'לא באה', //text of the button
+                    text: 'לא', //text of the button
                     callback: (callbackQuery, message) => { //to your callback will be passed callbackQuery and response from method
-                        const { firstName, lastName, id } = callbackQuery.from;
-                        const fullName = `${firstName} ${lastName}`;
-                        const fullUser = { [id] : fullName };
-                        const replyText = ` *${relavantText}*, _לא באה_ - ${fullName} `;
+                        const user = this.buildUser(callbackQuery);
+                        practicesCollection[practiceId][NOT_COMING].push(user);
+                        const replyText = this.buildPracticeReply(user, relavantText, 'לא באה');
                         $.sendMessage(replyText, {
                             parse_mode: 'Markdown'
                         }/*, { reply_to_message_id: message.messageId }*/);
                     }
                 },
                 {
-                    text: 'באה',
+                    text: 'אולי',
                     callback: (callbackQuery, message) => {
-                        const { firstName, lastName, id } = callbackQuery.from;
-                        const fullName = `${firstName} ${lastName}`;
-                        const fullUser = { [id] : fullName };
-                        practicesCollection[practiceId].coming.push(fullUser);
-                        const replyText = ` *${relavantText}*, _באה_ - ${fullName} `;
+                        const user = this.buildUser(callbackQuery);
+                        practicesCollection[practiceId][MAYBE_COMING].push(user);
+                        const replyText = this.buildPracticeReply(user, relavantText, 'אולי');
+                        $.sendMessage(replyText, {
+                            parse_mode: 'Markdown'
+                        }/*, { reply_to_message_id: message.messageId }*/);
+                    }
+                },
+                {
+                    text: 'כן',
+                    callback: (callbackQuery, message) => {
+                        const user = this.buildUser(callbackQuery);
+                        practicesCollection[practiceId][COMING].push(user);
+                        const replyText = this.buildPracticeReply(user, relavantText, 'באה');
                         $.sendMessage(replyText, {
                             parse_mode: 'Markdown'
                         }/*, { reply_to_message_id: message.messageId }*/);
@@ -77,22 +105,32 @@ class PingController extends TelegramBaseController {
         })*/
     }
 
+    getListOfPractices() {
+        let practices = "";
+        Object.keys(practicesCollection).forEach(practiceId => {
+            practices += `\n${practiceId} - ${practicesCollection[practiceId].details}`;
+        });
+
+        return practices;
+    }
 
     listHandler($) {
-        const keys = Object.keys(practicesCollection);
         const messagePrefix = 'Choose a practice ID:';
-        const message = `${messagePrefix} \n${keys.join('\n')}`;
+        const message = `${messagePrefix} \n${this.getListOfPractices()}`;
         $.sendMessage(message);
         $.waitForRequest
         .then($ => {
             const requestedId = $.message.text;
+            const practice = practicesCollection[requestedId];
 
             // See if the practiceId exist
-            if (!practicesCollection[requestedId]) {
+            if (!practice) {
                 $.sendMessage(`Didn't find practice ID: ${requestedId}`);
             }
 
-            $.sendMessage(practicesCollection[requestedId])
+            let coming = `The list of girls who are coming to practice \n*${practice.details} (${requestedId})*:\n`;
+            practice[COMING].forEach(user => coming += `\n${user.fullName} (${user.id})`);
+            $.sendMessage(coming, { parse_mode: 'Markdown' })
         })
     }
 
@@ -103,7 +141,6 @@ class PingController extends TelegramBaseController {
     get routes() {
         return {
             'newPracticeCommand': 'newPracticeHandler',
-            'pingCommand': 'pingHandler',
             'startCommand': 'startHandler',
             'listCommand': 'listHandler',
         }
@@ -122,6 +159,6 @@ tg.router
     pingController
 )
 .when(
-    new TextCommand('ping', 'pingCommand'),
+    new TextCommand('new', 'newPracticeCommand'),
     pingController
 )
