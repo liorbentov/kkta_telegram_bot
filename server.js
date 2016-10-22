@@ -14,7 +14,7 @@ const DELIMITER = ' ';
 
 let practicesCollection = {};
 
-class PingController extends TelegramBaseController {
+class Controller extends TelegramBaseController {
 
     buildUser(message) {
         const { firstName, lastName, id } = message.from;
@@ -25,6 +25,14 @@ class PingController extends TelegramBaseController {
 
     buildPracticeReply(user, practiceDetails, status) {
         return `*${practiceDetails}*, _${status}_ - ${user.fullName} `;
+    }
+
+    createNewPratice(practiceId, details) {
+        practicesCollection[practiceId] = {};
+        practicesCollection[practiceId].details = details;
+        practicesCollection[practiceId][COMING] = [];
+        practicesCollection[practiceId][NOT_COMING] = [];
+        practicesCollection[practiceId][MAYBE_COMING] = [];
     }
 
     addToGroup({ practice, user, group, unwantedGroups = [] }) {
@@ -56,18 +64,13 @@ class PingController extends TelegramBaseController {
         // Save to DB the new practice
 
         // Get the practice ID
-        const { chat, text, messageId: practiceId } = $.message;
-        const chatId = chat.id;
+        const { text, messageId: practiceId } = $.message;
 
         const words = text.split(DELIMITER);
         words.shift();
         const relavantText = words.join(DELIMITER);
 
-        practicesCollection[practiceId] = {};
-        practicesCollection[practiceId].details = relavantText;
-        practicesCollection[practiceId][COMING] = [];
-        practicesCollection[practiceId][NOT_COMING] = [];
-        practicesCollection[practiceId][MAYBE_COMING] = [];
+        this.createNewPratice(practiceId, relavantText);
 
         $.runInlineMenu({
             layout: 3,
@@ -151,7 +154,54 @@ class PingController extends TelegramBaseController {
         return practices;
     }
 
+    isListEmpty() {
+        return Object.keys(practicesCollection).length === 0;
+    }
+
+    deleteHandler($) {
+        if (this.isListEmpty()) {
+            return $.sendMessage('There are no practices');
+        }
+
+        const messagePrefix = 'Choose a practice ID:';
+        const message = `${messagePrefix} \n${this.getListOfPractices()}`;
+        $.sendMessage(message);
+        $.waitForRequest
+            .then($ => {
+                const requestedId = $.message.text;
+                const practice = practicesCollection[requestedId];
+
+                // See if the practiceId exist
+                if (!practice) {
+                    return $.sendMessage(`Didn't find practice ID: ${requestedId}`);
+                }
+
+                const validationMessage = `Are you sure you want to delete practice ${practice.details}`;
+                $.runInlineMenu({
+                    layout: 2,
+                    method: 'sendMessage',
+                    params: [validationMessage],
+                    menu: [{
+                            text: 'Yes',
+                            callback: (callbackQuery, message) => {
+                                delete practicesCollection[requestedId];
+                                $.sendMessage('Practice deleted');
+                            }
+                        }, {
+                            text: 'No',
+                            callback: (callbackQuery, message) => {
+                                $.sendMessage('No action was done');
+                            }
+                        }]
+                })
+            });
+    }
+
     listHandler($) {
+        if (this.isListEmpty()) {
+            return $.sendMessage('There are no practices');
+        }
+
         const messagePrefix = 'Choose a practice ID:';
         const message = `${messagePrefix} \n${this.getListOfPractices()}`;
         $.sendMessage(message);
@@ -162,7 +212,7 @@ class PingController extends TelegramBaseController {
 
             // See if the practiceId exist
             if (!practice) {
-                $.sendMessage(`Didn't find practice ID: ${requestedId}`);
+                return $.sendMessage(`Didn't find practice ID: ${requestedId}`);
             }
 
             let coming = `The list of girls who are coming to practice \n*${practice.details} (${requestedId})*:\n`;
@@ -197,25 +247,30 @@ class PingController extends TelegramBaseController {
 
     get routes() {
         return {
+            'deleteCommand': 'deleteHandler',
+            'listCommand': 'listHandler',
             'newPracticeCommand': 'newPracticeHandler',
             'startCommand': 'startHandler',
-            'listCommand': 'listHandler',
         }
     }
 }
 
-const pingController = new PingController();
+const controller = new Controller();
 
 tg.router
 .when(
     new TextCommand('/start', 'startCommand'),
-    pingController
+    controller
 )
 .when(
     new TextCommand('list', 'listCommand'),
-    pingController
+    controller
 )
 .when(
     new TextCommand('new', 'newPracticeCommand'),
-    pingController
+    controller
+)
+.when(
+    new TextCommand('delete', 'deleteCommand'),
+    controller
 )
