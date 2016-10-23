@@ -221,21 +221,21 @@ class Controller extends TelegramBaseController {
         if (practice[COMING].length === 0) {
             coming += " - \n";
         } else {
-            practice[COMING].forEach(user => coming += `${user.fullName} (${user.id})\n`);
+            practice[COMING].forEach((user, index) => coming += `${index+1}. ${user.fullName} (${user.id})\n`);
         }
 
         let maybeComing = `Girls who are maybe coming to practice:\n`;
         if (practice[MAYBE_COMING].length === 0) {
             maybeComing += " - \n";
         } else {
-            practice[MAYBE_COMING].forEach(user => maybeComing += `${user.fullName} (${user.id})\n`);
+            practice[MAYBE_COMING].forEach((user, index) => maybeComing += `${index+1}. ${user.fullName} (${user.id})\n`);
         }
 
         let notComing = `Girls who are not coming to practice:\n`;
         if (practice[NOT_COMING].length === 0) {
             notComing += " - \n";
         } else {
-            practice[NOT_COMING].forEach(user => notComing += `${user.fullName} (${user.id})\n`);
+            practice[NOT_COMING].forEach((user, index) => notComing += `${index+1}. ${user.fullName} (${user.id})\n`);
         }
 
         return `${coming}\n${maybeComing}\n${notComing}`;
