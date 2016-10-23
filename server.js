@@ -30,6 +30,7 @@ class Controller extends TelegramBaseController {
     createNewPratice(practiceId, details) {
         practicesCollection[practiceId] = {};
         practicesCollection[practiceId].details = details;
+        practicesCollection[practiceId].answerId = null;
         practicesCollection[practiceId][COMING] = [];
         practicesCollection[practiceId][NOT_COMING] = [];
         practicesCollection[practiceId][MAYBE_COMING] = [];
@@ -55,6 +56,28 @@ class Controller extends TelegramBaseController {
 
         // Add the user to the group
         practice[group].push(user);
+    }
+
+    sendPracticeReply(practiceId, $) {
+        const practice = practicesCollection[practiceId];
+        const message = `*${practice.details}*\n\ncoming - ${practice[COMING].length} \nmaybe coming - ${practice[MAYBE_COMING].length} \n not coming - ${practice[NOT_COMING].length} `;
+
+        if (practice.answerId) {
+            return $.api.editMessageText(this.getListMessage(practiceId), { 
+                chat_id: CHAT_ID,
+                message_id: practice.answerId,
+                parse_mode: 'Markdown',
+            });
+        }
+
+        practicesCollection[practiceId].answerId = 'temp';
+        $.sendMessage(this.getListMessage(practiceId), {
+            parse_mode: 'Markdown',
+            chat_id: CHAT_ID
+        })
+            .then(result => {
+                    practicesCollection[practiceId].answerId = result.messageId;
+                });
     }
 
     /**
@@ -88,9 +111,7 @@ class Controller extends TelegramBaseController {
                             unwantedGroups: [COMING, MAYBE_COMING]
                         });
                         const replyText = this.buildPracticeReply(user, relavantText, 'לא באה');
-                        $.sendMessage(replyText, {
-                            parse_mode: 'Markdown'
-                        }/*, { reply_to_message_id: message.messageId }*/);
+                        this.sendPracticeReply(practiceId, $);
                     }
                 },
                 {
@@ -104,9 +125,7 @@ class Controller extends TelegramBaseController {
                             unwantedGroups: [COMING, NOT_COMING]
                         });
                         const replyText = this.buildPracticeReply(user, relavantText, 'אולי');
-                        $.sendMessage(replyText, {
-                            parse_mode: 'Markdown'
-                        }/*, { reply_to_message_id: message.messageId }*/);
+                        this.sendPracticeReply(practiceId, $);
                     }
                 },
                 {
@@ -120,9 +139,7 @@ class Controller extends TelegramBaseController {
                             unwantedGroups: [NOT_COMING, MAYBE_COMING]
                         });
                         const replyText = this.buildPracticeReply(user, relavantText, 'באה');
-                        $.sendMessage(replyText, {
-                            parse_mode: 'Markdown'
-                        }/*, { reply_to_message_id: message.messageId }*/);
+                        this.sendPracticeReply(practiceId, $);
                     }
                 }]
         })
@@ -197,6 +214,33 @@ class Controller extends TelegramBaseController {
             });
     }
 
+    getListMessage(practiceId) {
+        const practice = practicesCollection[practiceId];
+
+        let coming = `The list of girls who are coming to practice \n*${practice.details} (${practiceId})*:\n`;
+        if (practice[COMING].length === 0) {
+            coming += " - \n";
+        } else {
+            practice[COMING].forEach(user => coming += `${user.fullName} (${user.id})\n`);
+        }
+
+        let maybeComing = `Girls who are maybe coming to practice:\n`;
+        if (practice[MAYBE_COMING].length === 0) {
+            maybeComing += " - \n";
+        } else {
+            practice[MAYBE_COMING].forEach(user => maybeComing += `${user.fullName} (${user.id})\n`);
+        }
+
+        let notComing = `Girls who are not coming to practice:\n`;
+        if (practice[NOT_COMING].length === 0) {
+            notComing += " - \n";
+        } else {
+            practice[NOT_COMING].forEach(user => notComing += `${user.fullName} (${user.id})\n`);
+        }
+
+        return `${coming}\n${maybeComing}\n${notComing}`;
+    }
+
     listHandler($) {
         if (this.isListEmpty()) {
             return $.sendMessage('There are no practices');
@@ -215,29 +259,7 @@ class Controller extends TelegramBaseController {
                 return $.sendMessage(`Didn't find practice ID: ${requestedId}`);
             }
 
-            let coming = `The list of girls who are coming to practice \n*${practice.details} (${requestedId})*:\n`;
-            if (practice[COMING].length === 0) {
-                coming += " - \n";
-            } else {
-                practice[COMING].forEach(user => coming += `${user.fullName} (${user.id})\n`);
-            }
-
-            let maybeComing = `Girls who are maybe coming to practice:\n`;
-            if (practice[MAYBE_COMING].length === 0) {
-                maybeComing += " - \n";
-            } else {
-                practice[MAYBE_COMING].forEach(user => maybeComing += `${user.fullName} (${user.id})\n`);
-            }
-
-            let notComing = `Girls who are not coming to practice:\n`;
-            if (practice[NOT_COMING].length === 0) {
-                notComing += " - \n";
-            } else {
-                practice[NOT_COMING].forEach(user => notComing += `${user.fullName} (${user.id})\n`);
-            }
-
-            const fullMessage = `${coming}\n${maybeComing}\n${notComing}`;
-            $.sendMessage(fullMessage, { parse_mode: 'Markdown' })
+            $.sendMessage(this.getListMessage(requestedId), { parse_mode: 'Markdown' })
         })
     }
 
