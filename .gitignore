@@ -1,3 +1,5 @@
 node_modules/
 variables.txt
 post-receive
+data/practices/
+npm-debug.log
